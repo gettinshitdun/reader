@@ -8,21 +8,16 @@
 </head>
 <body>
   <div class="container">
-
     <nav class="breadcrumb">
-      📖
       {%- for crumb in breadcrumbs %}
       <span class="sep">/</span><a href="{{ crumb.url }}">{{ crumb.name }}</a>
       {%- endfor %}
     </nav>
-
     <div class="entry-list">
-
       <a class="entry parent" href="../">
         <span class="icon">↩</span>
         <span class="name">..</span>
       </a>
-
       {%- for section in sections %}
       <a class="entry" href="{{ section.filename }}">
         <span class="icon">📄</span>
