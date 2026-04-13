@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ current_path }}</title>
+  <link rel="stylesheet" href="/static/common.css">
+</head>
+<body>
+  <div class="container">
+
+    <nav class="breadcrumb">
+      📁
+      {%- for crumb in breadcrumbs %}
+      <span class="sep">/</span><a href="{{ crumb.url }}">{{ crumb.name }}</a>
+      {%- endfor %}
+    </nav>
+
+    <form method="post" action="/upload" enctype="multipart/form-data" class="upload-bar">
+      <input type="file" id="f" name="file" multiple onchange="this.form.submit()" />
+      <button type="button" class="upload-btn" onclick="document.getElementById('f').click()">⬆ Upload</button>
+    </form>
+
+    <div class="entry-list">
+
+      {%- if parent_url %}
+      <a class="entry parent" href="{{ parent_url }}">
+        <span class="icon">↩</span>
+        <span class="name">..</span>
+      </a>
+      {%- endif %}
+
+      {%- for entry in entries %}
+      <a class="entry" href="{{ entry.url }}">
+        <span class="icon">{%- if entry.is_book %}📖{%- elif entry.is_dir %}📁{%- else %}📄{%- endif %}</span>
+        <span class="name">{{ entry.name }}</span>
+      </a>
+      {%- else %}
+      <div class="entry empty">empty directory</div>
+      {%- endfor %}
+
+    </div>
+  </div>
+</body>
+</html>

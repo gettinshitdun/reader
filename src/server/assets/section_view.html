@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ book_name }}</title>
+  <link rel="stylesheet" href="/static/common.css">
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+
+    .reader-wrap {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .iframe-container {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      overflow: hidden;
+      background: #ffffff;
+    }
+
+    .iframe-container iframe {
+      border: none;
+      height: 100%;
+      width: 100%;
+      transition: width 0.15s ease;
+    }
+
+    .bottom-bar {
+      padding: 0.5rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .nav-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .nav-spacer { flex: 1; }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.8rem;
+    }
+
+    .slider-row label { white-space: nowrap; }
+
+    .slider-row input[type="range"] {
+      flex: 1;
+      accent-color: #0066cc;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .slider-row input[type="range"] { accent-color: #6ab0ff; }
+    }
+  </style>
+</head>
+<body>
+  <div class="reader-wrap">
+    <div class="iframe-container">
+      <iframe id="content-frame" src="{{ iframe_src }}"></iframe>
+    </div>
+
+    <div class="entry-list bottom-bar">
+      <div class="nav-row">
+        {%- if prev_url %}
+        <a class="upload-btn" href="{{ prev_url }}">← Previous</a>
+        {%- else %}
+        <span class="nav-spacer"></span>
+        {%- endif %}
+
+        <span class="nav-spacer"></span>
+
+        {%- if next_url %}
+        <a class="upload-btn" href="{{ next_url }}">Next →</a>
+        {%- else %}
+        <span class="nav-spacer"></span>
+        {%- endif %}
+      </div>
+
+      <div class="slider-row">
+        <label for="padding-slider">Padding</label>
+        <input type="range" id="padding-slider" min="0" max="30" value="0" step="1">
+        <span id="padding-value">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const slider = document.getElementById('padding-slider');
+    const label = document.getElementById('padding-value');
+    const iframe = document.getElementById('content-frame');
+
+    function applyPadding(pct) {
+      iframe.style.width = (100 - 2 * pct) + '%';
+      label.textContent = pct + '%';
+    }
+
+    slider.addEventListener('input', function() {
+      const v = parseInt(this.value, 10);
+      applyPadding(v);
+      try { localStorage.setItem('reader-padding', v); } catch(e) {}
+    });
+
+    try {
+      const saved = localStorage.getItem('reader-padding');
+      if (saved !== null) {
+        const v = parseInt(saved, 10);
+        if (v >= 0 && v <= 30) {
+          slider.value = v;
+          applyPadding(v);
+        }
+      }
+    } catch(e) {}
+  </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -6,8 +6,9 @@ use std::time::Duration;
 
 use epub::doc::EpubDoc;
 use sha2::{Digest, Sha256};
+use walkdir::WalkDir;
 
-use crate::util::escape_html;
+use crate::extractor::util::DirHelper;
 
 pub const EPUBS_DIR: &str = "./epubs";
 pub const HTML_DIR: &str = "./html";
@@ -25,36 +26,69 @@ pub async fn run_extractor() -> anyhow::Result<()> {
 fn extract_all() -> anyhow::Result<()> {
     let epubs_root = Path::new(EPUBS_DIR);
     let html_root = Path::new(HTML_DIR);
-
-    if !epubs_root.exists() {
-        eprintln!("epubs directory does not exist: {EPUBS_DIR}");
-        return Ok(());
-    }
-
     fs::create_dir_all(html_root)?;
-    walk_and_extract(epubs_root, epubs_root, html_root)
-}
-
-fn walk_and_extract(dir: &Path, epubs_root: &Path, html_root: &Path) -> anyhow::Result<()> {
-    for entry in fs::read_dir(dir)? {
+    fs::create_dir_all(epubs_root)?;
+    let mut epub_paths: HashSet<DirHelper> = HashSet::new();
+    for entry in WalkDir::new(epubs_root) {
         let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            walk_and_extract(&path, epubs_root, html_root)?;
-        } else if path.extension().map_or(false, |e| e == "epub") {
-            let relative = path.strip_prefix(epubs_root)?;
-            let stem = path.file_stem().unwrap();
-            let out_dir = html_root
-                .join(relative.parent().unwrap_or(Path::new("")))
-                .join(stem);
-
-            if let Err(e) = maybe_convert(&path, &out_dir) {
-                eprintln!("Failed to process {}: {e}", path.display());
-            }
+        let entry = entry.path().strip_prefix(EPUBS_DIR)?;
+        if entry.starts_with("api") {
+            continue;
+        }
+        if entry.extension().map_or(false, |e| e == "epub") {
+            let entry = entry.with_extension("");
+            epub_paths.insert(DirHelper::new(entry.to_path_buf()));
         }
     }
-    Ok(())
+
+    let mut html_paths: HashSet<DirHelper> = HashSet::new();
+    for entry in WalkDir::new(html_root) {
+        let entry = entry?;
+        if entry.file_type().is_file() && entry.file_name() == ".hash" {
+            let entry = entry.path().strip_prefix(HTML_DIR)?;
+            let entry = entry.parent().unwrap();
+            html_paths.insert(DirHelper::new(entry.to_path_buf()));
+        }
+    }
+
+    epub_paths.iter().for_each(|epub_file| {
+        match maybe_convert(&epub_file.epub_file_path(), &epub_file.html_dir()) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("ERROR CONVERTING EPUB: {}", e.to_string());
+            }
+        }
+    });
+
+    for html_path in html_paths.iter() {
+        if !epub_paths.contains(&html_path) {
+            fs::remove_dir_all(&html_path.html_dir())?;
+        }
+    }
+
+    return anyhow::Ok(());
 }
+
+// fn walk_and_extract(dir: &Path, epubs_root: &Path, html_root: &Path) -> anyhow::Result<()> {
+//     for entry in fs::read_dir(dir)? {
+//         let entry = entry?;
+//         let path = entry.path();
+//         if path.is_dir() {
+//             walk_and_extract(&path, epubs_root, html_root)?;
+//         } else if path.extension().map_or(false, |e| e == "epub") {
+//             let relative = path.strip_prefix(epubs_root)?;
+//             let stem = path.file_stem().unwrap();
+//             let out_dir = html_root
+//                 .join(relative.parent().unwrap_or(Path::new("")))
+//                 .join(stem);
+//
+//             if let Err(e) = maybe_convert(&path, &out_dir) {
+//                 eprintln!("Failed to process {}: {e}", path.display());
+//             }
+//         }
+//     }
+//     Ok(())
+// }
 
 fn maybe_convert(epub_path: &Path, out_dir: &Path) -> anyhow::Result<()> {
     let hash = hash_file(epub_path)?;
@@ -67,13 +101,10 @@ fn maybe_convert(epub_path: &Path, out_dir: &Path) -> anyhow::Result<()> {
         }
     }
 
-    println!("Converting: {}", epub_path.display());
     fs::create_dir_all(out_dir)?;
     clean_output_dir(out_dir);
     convert_epub(epub_path, out_dir)?;
     fs::write(hash_path, &hash)?;
-    println!("Done: {}", out_dir.display());
-
     Ok(())
 }
 
@@ -94,8 +125,7 @@ fn clean_output_dir(out_dir: &Path) {
         }
         if path.is_dir() {
             let _ = fs::remove_dir_all(&path);
-        } else if name == "index.html"
-            || (name.starts_with("section_") && name.ends_with(".html"))
+        } else if name == "index.json" || name == "index.html" || (name.starts_with("section_") && name.ends_with(".html"))
         {
             let _ = fs::remove_file(&path);
         }
@@ -117,11 +147,9 @@ fn hash_file(path: &Path) -> anyhow::Result<String> {
 }
 
 fn convert_epub(epub_path: &Path, out_dir: &Path) -> anyhow::Result<()> {
-    let mut doc = EpubDoc::new(epub_path)
-        .map_err(|e| anyhow::anyhow!("Failed to open epub: {e}"))?;
-
+    let mut doc =
+        EpubDoc::new(epub_path).map_err(|e| anyhow::anyhow!("Failed to open epub: {e}"))?;
     let root_base = doc.root_base.clone();
-
     // Build path -> title map from TOC (strip fragment identifiers like #anchor)
     let toc_titles: HashMap<PathBuf, String> = doc
         .toc
@@ -132,7 +160,6 @@ fn convert_epub(epub_path: &Path, out_dir: &Path) -> anyhow::Result<()> {
             (PathBuf::from(path_str), nav.label.trim().to_string())
         })
         .collect();
-
     let mut sections: Vec<(String, String)> = Vec::new();
     let mut toc_hits = 0usize;
     let spine = doc.spine.clone();
@@ -140,7 +167,6 @@ fn convert_epub(epub_path: &Path, out_dir: &Path) -> anyhow::Result<()> {
 
     for (i, spine_item) in spine.iter().enumerate() {
         let id = &spine_item.idref;
-
         let Some(resource) = resources.get(id) else {
             continue;
         };
@@ -150,7 +176,6 @@ fn convert_epub(epub_path: &Path, out_dir: &Path) -> anyhow::Result<()> {
         if !mime.contains("html") {
             continue;
         }
-
         // Title resolution priority: TOC label > HTML <title> tag > fallback
         let toc_title = toc_titles.get(&resource.path).cloned();
         if toc_title.is_some() {
@@ -159,11 +184,10 @@ fn convert_epub(epub_path: &Path, out_dir: &Path) -> anyhow::Result<()> {
         let title = toc_title
             .or_else(|| extract_title_from_html(&content))
             .unwrap_or_else(|| format!("Chapter {}", i + 1));
-
         // Rewrite resource paths (img src, link href) so they resolve
         // correctly from the flat section file at the book root.
         let content = rewrite_resource_paths(&content, &resource.path, &root_base);
-
+        // let content = prettify_section_content(&content)?;
         let filename = format!("section_{:03}.html", i + 1);
         fs::write(out_dir.join(&filename), &content)?;
         sections.push((title, filename));
@@ -181,7 +205,7 @@ fn convert_epub(epub_path: &Path, out_dir: &Path) -> anyhow::Result<()> {
 
     let book_name = out_dir.file_name().unwrap().to_string_lossy();
     fs::write(
-        out_dir.join("index.html"),
+        out_dir.join("index.json"),
         generate_index(&book_name, &sections),
     )?;
 
@@ -206,21 +230,17 @@ fn extract_resources(
             || mime == "text/css"
             || mime.starts_with("font/")
             || mime == "application/vnd.ms-opentype";
-
         if !dominated_by {
             continue;
         }
-
         let Some((bytes, _)) = doc.get_resource(id) else {
             continue;
         };
-
         // Strip root_base prefix to get the output-relative path
         // e.g. OEBPS/images/foo.jpg -> images/foo.jpg
         let rel_path = res_path
             .strip_prefix(root_base)
             .unwrap_or(res_path.as_path());
-
         let dest = out_dir.join(rel_path);
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent)?;
@@ -312,18 +332,15 @@ fn extract_title_from_html(html: &str) -> Option<String> {
 }
 
 fn generate_index(book_name: &str, sections: &[(String, String)]) -> String {
-    let mut html = format!(
-        "<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"><title>{}</title></head>\n<body>\n<h1>{}</h1>\n<ul>\n",
-        escape_html(book_name),
-        escape_html(book_name)
-    );
-    for (title, filename) in sections {
-        html.push_str(&format!(
-            "  <li><a href=\"{}\">{}</a></li>\n",
-            filename,
-            escape_html(title)
-        ));
-    }
-    html.push_str("</ul>\n</body>\n</html>\n");
-    html
+    let index = serde_json::json!({
+        "book_name": book_name,
+        "sections": sections.iter().map(|(title, filename)| {
+            serde_json::json!({ "title": title, "filename": filename })
+        }).collect::<Vec<_>>()
+    });
+    serde_json::to_string_pretty(&index).unwrap()
+}
+
+fn prettify_section_content(content: &str) -> anyhow::Result<String> {
+    return anyhow::Ok(content.to_string());
 }

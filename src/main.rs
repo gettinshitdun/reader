@@ -1,4 +1,4 @@
-use crate::extractor::run_extractor;
+use crate::extractor::extractor::run_extractor;
 
 mod extractor;
 mod server;
@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn run_server() -> anyhow::Result<()> {
-    let app = server::router();
+    let app = server::server::router();
     let listener = tokio::net::TcpListener::bind("0.0.0.0:6969").await?;
     println!("Serving on http://0.0.0.0:6969");
     axum::serve(listener, app).await?;
