@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use epub::doc::EpubDoc;
+use notify::{RecursiveMode, Watcher};
 use sha2::{Digest, Sha256};
 use tokio::fs;
 use tokio::io::AsyncReadExt;
@@ -14,15 +15,74 @@ use crate::extractor::util::DirHelper;
 pub const EPUBS_DIR: &str = "./epubs";
 pub const HTML_DIR: &str = "./html";
 pub const DATA_DIR: &str = "./data";
-const POLL_INTERVAL_SECS: u64 = 60;
+const DEBOUNCE_SECS: u64 = 2;
+const FALLBACK_POLL_SECS: u64 = 300;
+
+static EXTRACT_NOTIFY: std::sync::LazyLock<tokio::sync::Notify> =
+    std::sync::LazyLock::new(tokio::sync::Notify::new);
+
+/// Wake the extractor immediately (used by upload / toggle handlers).
+pub fn trigger_extract() {
+    EXTRACT_NOTIFY.notify_one();
+}
 
 pub async fn run_extractor() -> anyhow::Result<()> {
+    // Run once at startup before setting up the watcher
+    if let Err(e) = extract_all().await {
+        eprintln!("Extractor error: {e}");
+    }
+
+    let notify_ref = &*EXTRACT_NOTIFY;
+    let _watcher = setup_fs_watcher(notify_ref);
+
     loop {
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(FALLBACK_POLL_SECS)) => {}
+            _ = EXTRACT_NOTIFY.notified() => {
+                // Debounce: wait a short time so rapid writes coalesce
+                tokio::time::sleep(Duration::from_secs(DEBOUNCE_SECS)).await;
+                // Drain any extra notifications that arrived during debounce
+                while let Ok(()) = tokio::time::timeout(
+                    Duration::from_millis(50),
+                    EXTRACT_NOTIFY.notified(),
+                ).await {}
+            }
+        }
         if let Err(e) = extract_all().await {
             eprintln!("Extractor error: {e}");
         }
-        tokio::time::sleep(Duration::from_secs(POLL_INTERVAL_SECS)).await;
     }
+}
+
+fn setup_fs_watcher(notify: &'static tokio::sync::Notify) -> Option<impl Watcher> {
+    let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
+        if let Ok(event) = res {
+            let dominated_by_epub = event.paths.iter().any(|p| {
+                p.extension().is_some_and(|e| e == "epub")
+                    || p.is_dir()
+            });
+            if dominated_by_epub {
+                notify.notify_one();
+            }
+        }
+    })
+    .map_err(|e| {
+        eprintln!("Failed to create fs watcher: {e}");
+        e
+    })
+    .ok()?;
+
+    let epubs_path = Path::new(EPUBS_DIR);
+    watcher
+        .watch(epubs_path, RecursiveMode::Recursive)
+        .map_err(|e| {
+            eprintln!("Failed to watch {EPUBS_DIR}: {e}");
+            e
+        })
+        .ok()?;
+
+    println!("Watching {EPUBS_DIR} for changes");
+    Some(watcher)
 }
 
 async fn extract_all() -> anyhow::Result<()> {

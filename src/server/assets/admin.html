@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Reader</title>
+  <link rel="stylesheet" href="/static/common.css">
+  <style>
+    .admin-wrap { max-width: 600px; margin: 0 auto; padding: 2rem 1rem; }
+    .admin-wrap h1 { margin-bottom: 1.5rem; }
+    .section-title { margin-top: 2rem; margin-bottom: 0.75rem; font-size: 1.1rem; font-weight: 600; }
+    .field { margin-bottom: 1rem; }
+    .field label { display: block; margin-bottom: 0.3rem; font-size: 0.9rem; }
+    .field input {
+      width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;
+      font-size: 1rem; box-sizing: border-box;
+    }
+    .checkbox-field { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+    .submit-btn {
+      padding: 0.6rem 1.2rem; font-size: 1rem;
+      border: none; border-radius: 4px; cursor: pointer;
+    }
+    .otp-box {
+      padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem;
+      border: 2px solid #27ae60; background: #eafaf1;
+    }
+    .otp-box code { font-size: 1.2rem; font-weight: bold; word-break: break-all; }
+    .user-list { list-style: none; padding: 0; }
+    .user-list li {
+      padding: 0.5rem 0; border-bottom: 1px solid #eee;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .badge {
+      font-size: 0.75rem; padding: 0.15rem 0.4rem; border-radius: 3px;
+      background: #3498db; color: #fff; margin-left: 0.5rem;
+    }
+    .badge.otp { background: #e67e22; }
+    .cat-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .cat-form input {
+      flex: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;
+      font-size: 1rem; box-sizing: border-box;
+    }
+    .cat-list { list-style: none; padding: 0; }
+    .cat-list li {
+      padding: 0.4rem 0.75rem; border-bottom: 1px solid #eee;
+      font-size: 0.95rem;
+    }
+    @media (prefers-color-scheme: dark) {
+      .field input, .cat-form input { background: #2a2a2a; border-color: #555; color: #eee; }
+      .otp-box { background: #1a3a2a; border-color: #27ae60; }
+      .user-list li, .cat-list li { border-color: #444; }
+    }
+    @media (max-width: 480px) {
+      .admin-wrap { padding: 1.5rem 0.75rem; }
+      .cat-form input { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-wrap">
+    <nav class="breadcrumb">
+      <a href="/">root</a> <span class="sep">/</span> <span>admin</span>
+    </nav>
+
+    <h1>Admin Panel</h1>
+
+    {%- if created_user %}
+    <div class="otp-box">
+      User <strong>{{ created_user }}</strong> created. One-time password: <code>{{ created_otp }}</code>
+    </div>
+    {%- endif %}
+
+    {%- if error %}
+    <div style="color:#c0392b; margin-bottom:1rem;">{{ error }}</div>
+    {%- endif %}
+
+    <div class="section-title">Create User</div>
+    <form method="post" action="/admin">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required />
+      </div>
+      <div class="checkbox-field">
+        <input type="checkbox" id="is_admin" name="is_admin" value="true" />
+        <label for="is_admin">Admin</label>
+      </div>
+      <button type="submit" class="upload-btn submit-btn">Create user</button>
+    </form>
+
+    <div class="section-title">Users</div>
+    <ul class="user-list entry-list">
+      {%- for user in users %}
+      <li>
+        <span>{{ user.username }}
+          {%- if user.is_admin %}<span class="badge">admin</span>{%- endif %}
+          {%- if user.must_change_password %}<span class="badge otp">OTP</span>{%- endif %}
+        </span>
+      </li>
+      {%- endfor %}
+    </ul>
+
+    <div class="section-title">Categories</div>
+    <form method="post" action="/admin/category" class="cat-form">
+      <input type="text" name="category" placeholder="New category name" required />
+      <button type="submit" class="upload-btn submit-btn">Add</button>
+    </form>
+    <ul class="cat-list entry-list" style="margin-top: 0.75rem;">
+      {%- for cat in categories %}
+      <li>{{ cat }}</li>
+      {%- else %}
+      <li style="color:#888; font-style:italic;">No categories yet</li>
+      {%- endfor %}
+    </ul>
+  </div>
+</body>
+</html>

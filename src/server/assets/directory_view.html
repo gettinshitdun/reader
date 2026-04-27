@@ -5,35 +5,105 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ current_path }}</title>
   <link rel="stylesheet" href="/static/common.css">
+  <style>
+    .user-bar {
+      display: flex; justify-content: flex-end; align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem; padding: 0.5rem 0; font-size: 0.85rem;
+    }
+    .user-bar .username { opacity: 0.7; }
+    .user-bar form { margin: 0; }
+    .owner-label { font-size: 0.7rem; opacity: 0.5; margin-left: 0.5rem; }
+    .upload-bar { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
+
+    dialog {
+      border: none; border-radius: 10px; padding: 0;
+      max-width: 420px; width: 90%;
+      margin: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,.2);
+    }
+    dialog::backdrop { background: rgba(0,0,0,.4); }
+    .dialog-content { padding: 1.5rem; }
+    .dialog-content h2 { margin-bottom: 1.25rem; font-size: 1.15rem; }
+    .dialog-field { margin-bottom: 1rem; }
+    .dialog-field label { display: block; margin-bottom: 0.3rem; font-size: 0.9rem; font-weight: 500; }
+    .dialog-field select,
+    .dialog-field input[type="file"] {
+      width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;
+      font-size: 0.95rem; box-sizing: border-box;
+    }
+    .dialog-field select { appearance: auto; }
+    .dialog-check { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; font-size: 0.9rem; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; }
+    .dialog-actions button { font-size: 0.95rem; padding: 0.5rem 1rem; }
+    .btn-cancel {
+      background: transparent; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; color: inherit;
+    }
+    .dialog-error { color: #c0392b; font-size: 0.85rem; margin-top: 0.25rem; display: none; }
+
+    .upload-banner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.6rem 1rem; border-radius: 8px; margin-bottom: 1rem;
+      background: #eaf4ff; border: 1px solid #b3d4fc; font-size: 0.9rem;
+    }
+    .upload-banner .spinner {
+      display: inline-block; width: 14px; height: 14px; border: 2px solid #b3d4fc;
+      border-top-color: #0066cc; border-radius: 50%; animation: spin 0.8s linear infinite;
+      margin-right: 0.5rem; vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (prefers-color-scheme: dark) {
+      .upload-banner { background: #1a2a3a; border-color: #2a4a6a; }
+      dialog { background: #252525; color: #e0e0e0; }
+      .dialog-field select,
+      .dialog-field input[type="file"] { background: #2a2a2a; border-color: #555; color: #eee; }
+      .btn-cancel { border-color: #555; }
+    }
+  </style>
 </head>
 <body>
   <div class="container">
 
+    <div class="user-bar">
+      <span class="username">{{ user.username }}</span>
+      <a href="/profile" class="upload-btn" style="font-size:0.8rem; padding:0.2rem 0.5rem;">Profile</a>
+      {%- if user.is_admin %}
+      <a href="/admin" class="upload-btn" style="font-size:0.8rem; padding:0.2rem 0.5rem;">Admin</a>
+      {%- endif %}
+      <form method="post" action="/logout">
+        <button type="submit" class="upload-btn" style="font-size:0.8rem; padding:0.2rem 0.5rem;">Logout</button>
+      </form>
+    </div>
+
     <nav class="breadcrumb">
-      📁
       {%- for crumb in breadcrumbs %}
       <span class="sep">/</span><a href="{{ crumb.url }}">{{ crumb.name }}</a>
       {%- endfor %}
     </nav>
 
-    <form method="post" action="/upload" enctype="multipart/form-data" class="upload-bar">
-      <input type="file" id="f" name="file" multiple onchange="this.form.submit()" />
-      <button type="button" class="upload-btn" onclick="document.getElementById('f').click()">⬆ Upload</button>
-    </form>
+    <div class="upload-banner" id="upload-banner" style="display:none;">
+      <span><span class="spinner"></span>Book uploaded. Processing...</span>
+      <button class="upload-btn" style="font-size:0.8rem; padding:0.2rem 0.6rem;" onclick="location.href=location.pathname">Refresh</button>
+    </div>
+
+    <div class="upload-bar">
+      <button class="upload-btn" id="open-upload">Upload</button>
+    </div>
 
     <div class="entry-list">
 
       {%- if parent_url %}
       <a class="entry parent" href="{{ parent_url }}">
-        <span class="icon">↩</span>
+        <span class="icon">&#8617;</span>
         <span class="name">..</span>
       </a>
       {%- endif %}
 
       {%- for entry in entries %}
       <a class="entry" href="{{ entry.url }}">
-        <span class="icon">{%- if entry.is_book %}📖{%- elif entry.is_dir %}📁{%- else %}📄{%- endif %}</span>
-        <span class="name">{{ entry.name }}</span>
+        <span class="icon">{%- if entry.is_book %}&#128214;{%- elif entry.is_dir %}&#128193;{%- else %}&#128196;{%- endif %}</span>
+        <span class="name">{{ entry.name }}{%- if entry.uploaded_by %}<span class="owner-label">by {{ entry.uploaded_by }}</span>{%- endif %}</span>
       </a>
       {%- else %}
       <div class="entry empty">empty directory</div>
@@ -41,5 +111,76 @@
 
     </div>
   </div>
+
+  <dialog id="upload-dialog">
+    <form method="post" action="/upload" enctype="multipart/form-data" class="dialog-content" id="upload-form">
+      <h2>Upload EPUB</h2>
+
+      <div class="dialog-field">
+        <label for="epub-file">File</label>
+        <input type="file" id="epub-file" name="file" accept=".epub" required />
+      </div>
+
+      <div class="dialog-field" id="category-field">
+        <label for="category-select">Category</label>
+        <select id="category-select" name="category">
+          {%- for cat in categories %}
+          <option value="{{ cat }}"{% if current_path is containing(cat) %} selected{% endif %}>{{ cat }}</option>
+          {%- else %}
+          <option value="" disabled selected>No categories available</option>
+          {%- endfor %}
+        </select>
+        <div class="dialog-error" id="cat-error">A category is required for public uploads.</div>
+      </div>
+
+      <div class="dialog-check">
+        <input type="checkbox" id="private-check" name="private" value="true" />
+        <label for="private-check">Upload as private</label>
+      </div>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn-cancel" id="cancel-upload">Cancel</button>
+        <button type="submit" class="upload-btn">Upload</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    (function() {
+      var dialog = document.getElementById('upload-dialog');
+      var openBtn = document.getElementById('open-upload');
+      var cancelBtn = document.getElementById('cancel-upload');
+      var privateCheck = document.getElementById('private-check');
+      var catField = document.getElementById('category-field');
+      var catSelect = document.getElementById('category-select');
+      var form = document.getElementById('upload-form');
+      var catError = document.getElementById('cat-error');
+
+      openBtn.addEventListener('click', function() { dialog.showModal(); });
+      cancelBtn.addEventListener('click', function() { dialog.close(); });
+      dialog.addEventListener('click', function(e) {
+        if (e.target === dialog) dialog.close();
+      });
+
+      privateCheck.addEventListener('change', function() {
+        catField.style.display = this.checked ? 'none' : '';
+        catSelect.disabled = this.checked;
+        catError.style.display = 'none';
+      });
+
+      form.addEventListener('submit', function(e) {
+        if (!privateCheck.checked && !catSelect.value) {
+          e.preventDefault();
+          catError.style.display = 'block';
+        }
+      });
+
+      if (new URLSearchParams(window.location.search).has('uploaded')) {
+        var banner = document.getElementById('upload-banner');
+        banner.style.display = '';
+        setTimeout(function() { window.location.href = window.location.pathname; }, 5000);
+      }
+    })();
+  </script>
 </body>
 </html>

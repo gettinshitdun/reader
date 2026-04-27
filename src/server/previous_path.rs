@@ -1,10 +1,8 @@
-use std::path::PathBuf;
-
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
-use crate::extractor::extractor::DATA_DIR;
+use crate::server::auth;
 
 #[derive(Deserialize, Serialize, Clone)]
 pub struct PreviousPage {
@@ -12,23 +10,25 @@ pub struct PreviousPage {
 }
 
 impl PreviousPage {
-    pub async fn set(path: &str) -> Result<()> {
-        let previous_file = PathBuf::from(DATA_DIR).join("previous.json");
+    pub async fn set(username: &str, path: &str) -> Result<()> {
+        let dir = auth::user_data_dir(username);
+        fs::create_dir_all(&dir).await?;
+        let previous_file = dir.join("previous.json");
         let previous = Self {
             path: path.to_string(),
         };
         let json = serde_json::to_string_pretty(&previous)?;
         fs::write(previous_file, json).await?;
-        return anyhow::Ok(());
+        Ok(())
     }
 
-    pub async fn get() -> Option<String> {
-        let data = PathBuf::from(DATA_DIR).join("previous.json");
-        if let Ok(prev_json) = fs::read_to_string(data).await {
-            if let Ok(previous) = serde_json::from_str::<Self>(&prev_json) {
-                return Some(previous.path);
-            }
+    pub async fn get(username: &str) -> Option<String> {
+        let data = auth::user_data_dir(username).join("previous.json");
+        if let Ok(prev_json) = fs::read_to_string(data).await
+            && let Ok(previous) = serde_json::from_str::<Self>(&prev_json)
+        {
+            return Some(previous.path);
         }
-        return None;
+        None
     }
 }
