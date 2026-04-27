@@ -76,6 +76,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #0066cc;
+  min-width: 0;
 }
 .entry .name:hover { text-decoration: underline; }
 .entry.parent .name { color: #555; }
@@ -84,6 +85,13 @@ body {
   color: #888;
   font-style: italic;
   font-size: 0.9rem;
+}
+
+@media (max-width: 480px) {
+  .container { padding: 1rem 0.75rem; }
+  .entry .name { white-space: normal; word-break: break-word; }
+  .entry { padding: 0.6rem 0.75rem; }
+  .upload-btn { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
 }
 
 @media (prefers-color-scheme: dark) {

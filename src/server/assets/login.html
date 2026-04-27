@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — Reader</title>
+  <link rel="stylesheet" href="/static/common.css">
+  <style>
+    body { display: flex; justify-content: center; align-items: center; min-height: 100dvh; }
+    .login-box { width: 100%; max-width: 360px; padding: 2rem; }
+    .login-box h1 { margin-bottom: 1.5rem; font-size: 1.5rem; }
+    .field { margin-bottom: 1rem; }
+    .field label { display: block; margin-bottom: 0.3rem; font-size: 0.9rem; }
+    .field input {
+      width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;
+      font-size: 1rem; box-sizing: border-box;
+    }
+    .error { color: #c0392b; margin-bottom: 1rem; font-size: 0.9rem; }
+    .submit-btn {
+      width: 100%; padding: 0.6rem; font-size: 1rem;
+      border: none; border-radius: 4px; cursor: pointer;
+    }
+    @media (prefers-color-scheme: dark) {
+      .field input { background: #2a2a2a; border-color: #555; color: #eee; }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-box entry-list">
+    <h1>Login</h1>
+    {%- if error %}
+    <div class="error">{{ error }}</div>
+    {%- endif %}
+    <form method="post" action="/login">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" autocomplete="username" autofocus required />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required />
+      </div>
+      <button type="submit" class="upload-btn submit-btn">Sign in</button>
+    </form>
+  </div>
+</body>
+</html>
