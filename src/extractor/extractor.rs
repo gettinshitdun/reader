@@ -57,6 +57,15 @@ pub async fn run_extractor() -> anyhow::Result<()> {
 fn setup_fs_watcher(notify: &'static tokio::sync::Notify) -> Option<impl Watcher> {
     let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, _>| {
         if let Ok(event) = res {
+            // Ignore metadata-only changes (e.g. atime updates from reading files)
+            // to avoid a self-triggering loop where extract_all() reads epubs,
+            // which updates atime, which fires IN_ATTRIB, which re-triggers extraction.
+            if matches!(
+                event.kind,
+                notify::EventKind::Modify(notify::event::ModifyKind::Metadata(_))
+            ) {
+                return;
+            }
             let dominated_by_epub = event.paths.iter().any(|p| {
                 p.extension().is_some_and(|e| e == "epub")
                     || p.is_dir()
